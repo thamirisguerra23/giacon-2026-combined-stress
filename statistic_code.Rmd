@@ -1,0 +1,894 @@
+---
+title: "Statistical analyses: lignocellulosic inhibitors and lactic acid bacteria contamination in *S. cerevisiae* PE-2 co-cultures"
+author: "Thamiris Guerra Giacon"
+date: "`r Sys.Date()`"
+output:
+  html_document:
+    toc: true
+    toc_float: true
+    number_sections: true
+---
+
+## Install packages
+
+```{r}
+install.packages(c("DescTools", "tidyr")) 
+```
+
+```{r}
+library(DescTools)
+library(tidyr)
+library(tidyr)
+library(dplyr)
+library(multcomp)
+library(ggplot2)y
+```
+
+\# Overview This document contains the statistical analyses supporting the manuscript "[manuscript title]". It is intended to make every test reported in the paper reproducible from the raw data.
+
+## Experimental design
+
+The industrial yeast *Saccharomyces cerevisiae* PE-2 was cultivated in MBL medium (20 g/L glucose, pH 6.0, 30 °C, static, 24 h) under four inoculation conditions:
+
+|           |                     |                    |                    |
+|-----------|---------------------|--------------------|--------------------|
+| **Assay** | ***S. cerevisiae*** | ***L. fermentum*** | ***L. plantarum*** |
+| **A**     | 10⁷                 | –                  | –                  |
+| **B**     | 10⁷                 | 10⁷                | –                  |
+| **C**     | 10⁷                 | –                  | 10⁷                |
+| **D**     | 10⁷                 | 5 × 10⁶            | 5 × 10⁶            |
+
+Each inoculation condition was combined with one of ten inhibitor conditions: no inhibitor (control), HMF, furfural, acetic, formic, glycolic, levulinic and ferulic acids, syringaldehyde and vanillin, each tested individually. \_\_\_\_\_\_\_\_\_\_\_\_\_\_\_\_\_\_\_\_\_\_\_\_\_\_\_\_\_\_\_\_\_\_\_\_\_\_\_\_\_\_\_\_\_\_\_\_\_\_\_\_\_\_\_\_\_\_\_\_\_\_\_\_\_\_\_\_\_\_\_\_\_\_\_\_\_\_\_\_\_\_\_\_\_\_\_\_\_\_\_\_\_\_\_\_\_\_\_\_\_\_\_\_\_\_\_\_\_
+
+# Fig 1. Yeast viability
+
+Yeast viability (%) was determined after 24 h by methylene blue staining and counting in a Neubauer chamber. The question addressed here is whether bacterial contamination reduces yeast viability relative to the bacteria-free culture exposed to the same inhibitor, and whether the two bacterial strains differ in their effect.
+
+```{r}
+
+## ---- viability-data ----
+wide <- read.csv("viability.csv", check.names = FALSE)
+ 
+inhibitor_levels <- c("Control", "HMF", "Furfural", "Acetic acid", "Formic acid",
+                      "Glycolic acid", "Levulinic acid", "Ferulic acid",
+                      "Syringaldehyde", "Vanillin")
+assay_levels <- c("none", "LF", "LP", "LFLP")
+ 
+viab <- wide %>%
+  pivot_longer(-inhibitor, names_to = c("assay", "rep"),
+               names_sep = "_", values_to = "viability") %>%
+  mutate(inhibitor = factor(inhibitor, levels = inhibitor_levels),
+         assay     = factor(assay, levels = assay_levels))
+
+## ---- viability-stats ----
+# Within each inhibitor block: one-way ANOVA, Dunnett vs bacteria-free (none),
+# Tukey among contaminated assays (LF, LP, LF+LP).
+anova_res <- list(); dunnett_res <- list(); tukey_res <- list()
+ 
+for (inh in inhibitor_levels) {
+  d <- filter(viab, inhibitor == inh)
+  fit <- aov(viability ~ assay, data = d)
+  anova_res[[inh]] <- data.frame(inhibitor = inh,
+                                 F = summary(fit)[[1]][["F value"]][1],
+                                 p = summary(fit)[[1]][["Pr(>F)"]][1])
+ 
+  dun <- summary(glht(fit, linfct = mcp(assay = "Dunnett")))
+  dunnett_res[[inh]] <- data.frame(inhibitor  = inh,
+                                   comparison = names(dun$test$coefficients),
+                                   diff       = unname(dun$test$coefficients),
+                                   p_adj      = unname(dun$test$pvalues))
+ 
+  dc  <- droplevels(filter(d, assay != "none"))
+  tuk <- TukeyHSD(aov(viability ~ assay, data = dc))$assay
+  tukey_res[[inh]] <- data.frame(inhibitor = inh, comparison = rownames(tuk),
+                                 diff = tuk[, "diff"], p_adj = tuk[, "p adj"])
+}
+ 
+anova_tab   <- bind_rows(anova_res)
+dunnett_tab <- bind_rows(dunnett_res)
+tukey_tab   <- bind_rows(tukey_res); rownames(tukey_tab) <- NULL
+ 
+knitr::kable(anova_tab,   digits = 3, caption = "One-way ANOVA per inhibitor")
+knitr::kable(dunnett_tab, digits = 3, caption = "Dunnett's test vs bacteria-free control")
+knitr::kable(tukey_tab,   digits = 3, caption = "Tukey's HSD among contaminated assays")
+ 
+## ---- viability-figure ----
+# Summary (mean, SD) and significance marks from Dunnett's test
+sig <- dunnett_tab %>%
+  mutate(assay = sub(" - none", "", comparison),
+         star  = ifelse(p_adj < 0.05, "*", "")) %>%
+  dplyr::select(inhibitor, assay, star)
+ 
+summ <- viab %>%
+  group_by(inhibitor, assay) %>%
+  summarise(mean = mean(viability), sd = sd(viability), .groups = "drop") %>%
+  left_join(mutate(sig, inhibitor = factor(inhibitor, levels = inhibitor_levels),
+                   assay = factor(assay, levels = assay_levels)),
+            by = c("inhibitor", "assay")) %>%
+  mutate(star       = ifelse(is.na(star), "", star),
+         label_mean = paste0(sprintf("%.0f", mean), star),
+         label_sd   = paste0("± ", sprintf("%.1f", sd)),
+         text_col   = ifelse(mean > 88, "white", "grey10"))
+ 
+assay_labels <- c(none = "No LAB", LF = "LF", LP = "LP", LFLP = "LF + LP")
+x_labels <- c("Control",
+              expression("HMF (1 g·L"^-1*")"),
+              expression("Furfural (3 g·L"^-1*")"),
+              expression("Acetic acid (4 g·L"^-1*")"),
+              expression("Formic acid (0.75 g·L"^-1*")"),
+              expression("Glycolic acid (0.75 g·L"^-1*")"),
+              expression("Levulinic acid (3 g·L"^-1*")"),
+              expression("Ferulic acid (0.75 g·L"^-1*")"),
+              expression("Syringaldehyde (0.75 g·L"^-1*")"),
+              expression("Vanillin (0.75 g·L"^-1*")"))
+ 
+fig1 <- ggplot(summ, aes(x = inhibitor, y = assay, fill = mean)) +
+  geom_tile(colour = "white", linewidth = 1.2) +
+  geom_text(aes(label = label_mean, colour = text_col),
+            nudge_y = 0.13, size = 3.4, fontface = "bold") +
+  geom_text(aes(label = label_sd, colour = text_col),
+            nudge_y = -0.20, size = 2.5) +
+  scale_colour_identity() +
+  scale_fill_distiller(palette = "Blues", direction = 1, limits = c(65, 100),
+                       name = "Yeast viability (%)") +
+  scale_y_discrete(limits = rev(assay_levels), labels = assay_labels) +
+  scale_x_discrete(labels = x_labels) +
+  labs(x = NULL, y = NULL) +
+  theme_minimal(base_size = 10) +
+  theme(panel.grid  = element_blank(),
+        axis.text.x = element_text(angle = 40, hjust = 1, colour = "black"),
+        axis.text.y = element_text(colour = "black"),
+        legend.title = element_text(angle = 90, hjust = 0.5),
+        legend.key.height = unit(1.2, "cm")) +
+  guides(fill = guide_colourbar(title.position = "right"))
+ 
+fig1
+ 
+ggsave("Fig1_viability.tiff", fig1, width = 22, height = 9, units = "cm",
+       dpi = 600, device = "tiff", compression = "lzw", bg = "white")
+ggsave("Fig1_viability.pdf", fig1, width = 22, height = 9, units = "cm",
+       device = cairo_pdf, bg = "white")
+ 
+```
+
+\_\_\_\_\_\_\_\_\_\_\_\_\_\_\_\_\_\_\_\_\_\_\_\_\_\_\_\_\_\_\_\_\_\_\_\_\_\_\_\_\_\_\_\_\_\_\_\_\_\_\_\_\_\_\_\_\_\_\_\_\_\_\_\_\_\_\_\_\_\_\_\_\_\_\_\_\_\_\_\_\_\_\_\_\_\_\_\_\_\_\_\_\_\_\_\_\_\_\_\_\_\_\_\_\_\_\_\_\_\_\_\_
+
+# Fig2. yeast growth
+
+```{r}
+## ---- growth-setup ----
+library(readxl)
+library(tidyr)
+library(dplyr)
+library(multcomp)
+library(ggplot2)
+ 
+## ---- growth-data ----
+# Same input file used for the bubble plot: one row per inhibitor,
+# yeast growth ratio (X24/X0) for each assay and replicate.
+df_raw <- read_excel(
+  path      = "bubbleplot.xlsx",
+  sheet     = 1,
+  skip      = 2,
+  col_names = c("inhibitor",
+                "none_1", "none_2", "none_3",
+                "LF_1",   "LF_2",   "LF_3",
+                "LP_1",   "LP_2",   "LP_3",
+                "LFLP_1", "LFLP_2", "LFLP_3")
+) %>%
+  filter(!is.na(inhibitor), inhibitor != "") %>%
+  mutate(across(-inhibitor, as.numeric))
+ 
+inhibitor_levels <- df_raw$inhibitor          # keeps the order of the spreadsheet
+assay_levels     <- c("none", "LF", "LP", "LFLP")
+ 
+growth <- df_raw %>%
+  pivot_longer(-inhibitor, names_to = c("assay", "rep"),
+               names_sep = "_", values_to = "ratio") %>%
+  mutate(inhibitor = factor(inhibitor, levels = inhibitor_levels),
+         assay     = factor(assay, levels = assay_levels),
+         rep       = factor(rep))
+ 
+## ---- growth-normalization ----
+# Normalization to the bacteria-free culture of the same block.
+# "paired": replicate i of each assay divided by replicate i of No LAB
+#           (use only if replicate i of all assays came from the same yeast inoculum)
+# "mean":   each replicate divided by the mean of No LAB in the same block
+normalization <- "mean"
+ 
+growth <- growth %>%
+  group_by(inhibitor, rep) %>%
+  mutate(ref_paired = ratio[assay == "none"]) %>%
+  group_by(inhibitor) %>%
+  mutate(ref_mean = mean(ratio[assay == "none"])) %>%
+  ungroup() %>%
+  mutate(fc = if (normalization == "paired") ratio / ref_paired else ratio / ref_mean)
+ 
+## ---- growth-stats ----
+# All replicates of a block were inoculated from a single pre-culture, so
+# replicate numbering is arbitrary: no pairing, no replicate factor.
+# Tests are run on log-transformed raw growth ratios, log(X24/X0), not on
+# normalized values: the normalized No LAB group would have no variance, and
+# the log removes the dependence of the variance on the mean (ratios are multiplicative).
+anova_res <- list(); dunnett_res <- list(); tukey_res <- list()
+ 
+for (inh in inhibitor_levels) {
+  d   <- filter(growth, inhibitor == inh)
+  fit <- aov(log(ratio) ~ assay, data = d)
+  anova_res[[inh]] <- data.frame(inhibitor = inh,
+                                 F = summary(fit)[[1]][["F value"]][1],
+                                 p = summary(fit)[[1]][["Pr(>F)"]][1])
+ 
+  dun <- summary(glht(fit, linfct = mcp(assay = "Dunnett")))
+  dunnett_res[[inh]] <- data.frame(inhibitor  = inh,
+                                   comparison = names(dun$test$coefficients),
+                                   diff       = unname(dun$test$coefficients),
+                                   p_adj      = unname(dun$test$pvalues))
+ 
+  dc  <- droplevels(filter(d, assay != "none"))
+  tuk <- TukeyHSD(aov(log(ratio) ~ assay, data = dc))$assay
+  tukey_res[[inh]] <- data.frame(inhibitor = inh, comparison = rownames(tuk),
+                                 diff = tuk[, "diff"], p_adj = tuk[, "p adj"])
+}
+ 
+growth_anova   <- bind_rows(anova_res)
+growth_dunnett <- bind_rows(dunnett_res)
+growth_tukey   <- bind_rows(tukey_res); rownames(growth_tukey) <- NULL
+ 
+knitr::kable(growth_anova,   digits = 3, caption = "One-way ANOVA per inhibitor, log(X24/X0)")
+knitr::kable(growth_dunnett, digits = 3, caption = "Dunnett's test vs bacteria-free control")
+knitr::kable(growth_tukey,   digits = 3, caption = "Tukey's HSD among contaminated assays")
+ 
+## ---- growth-figure ----
+sig <- growth_dunnett %>%
+  mutate(assay = sub(" - none", "", comparison),
+         star  = ifelse(p_adj < 0.05, "*", "")) %>%
+  dplyr::select(inhibitor, assay, star) %>%
+  mutate(inhibitor = factor(inhibitor, levels = inhibitor_levels),
+         assay     = factor(assay, levels = assay_levels))
+ 
+summ <- growth %>%
+  group_by(inhibitor, assay) %>%
+  summarise(mean = mean(fc), sd = sd(fc), .groups = "drop") %>%
+  left_join(sig, by = c("inhibitor", "assay")) %>%
+  mutate(star       = ifelse(is.na(star), "", star),
+         label_mean = paste0(sprintf("%.2f", mean), star),
+         label_sd   = ifelse(assay == "none" & normalization == "paired", "",
+                             paste0("± ", sprintf("%.2f", sd))),
+         log2fc     = log2(mean),
+         )
+ 
+# Symmetric color limits in log2 space, centered on fold-change = 1
+lim <- max(abs(summ$log2fc), na.rm = TRUE)
+summ <- mutate(summ, text_col = ifelse(abs(log2fc) > 0.6 * lim, "white", "grey10"))
+fc_breaks <- c(0.25, 0.5, 1, 2, 4)
+fc_breaks <- fc_breaks[abs(log2(fc_breaks)) <= lim]
+ 
+assay_labels <- c(none = "No LAB", LF = "LF", LP = "LP", LFLP = "LF + LP")
+ 
+# Bubble plot: bubble size and color = mean normalized growth;
+# label inside the bubble = mean (+ * if significant); SD below the bubble.
+fig2 <- ggplot(summ, aes(x = inhibitor, y = assay)) +
+  geom_point(aes(size = mean, fill = log2fc),
+             shape = 21, colour = "grey30", stroke = 0.4) +
+  geom_text(aes(label = label_mean, colour = text_col),
+            size = 2.7, fontface = "bold") +
+  geom_text(aes(label = label_sd), colour = "grey35",
+            nudge_y = -0.42, size = 2.3) +
+  scale_colour_identity() +
+  scale_size_continuous(range = c(11, 19), guide = "none") +  # min size keeps labels inside
+  scale_fill_distiller(palette = "RdBu", direction = 1, limits = c(-lim, lim),
+                       breaks = log2(fc_breaks), labels = fc_breaks,
+                       name = "Yeast growth\n(relative to No LAB)") +
+  scale_y_discrete(limits = rev(assay_levels), labels = assay_labels,
+                   expand = expansion(add = 0.6)) +
+  scale_x_discrete(guide = guide_axis(angle = 40)) +
+  labs(x = NULL, y = NULL) +
+  theme_minimal(base_size = 10) +
+  theme(panel.grid.major = element_line(colour = "grey92", linewidth = 0.3),
+        panel.grid.minor = element_blank(),
+        panel.border = element_rect(colour = "grey85", fill = NA, linewidth = 0.4),
+        axis.text   = element_text(colour = "black"),
+        legend.title = element_text(size = 8.5),
+        plot.margin = margin(12, 8, 4, 4),
+        legend.key.height = unit(1.2, "cm"))
+ 
+fig2
+ 
+ggsave("Fig2_growth.tiff", fig2, width = 22, height = 11, units = "cm",
+       dpi = 600, device = "tiff", compression = "lzw", bg = "white")
+ggsave("Fig2_growth.pdf", fig2, width = 22, height = 11, units = "cm",
+       device = cairo_pdf, bg = "white")
+```
+
+\_\_\_\_\_\_\_\_\_\_\_\_\_\_\_\_\_\_\_\_\_\_\_\_\_\_\_\_\_\_\_\_\_\_\_\_\_\_\_\_\_\_\_\_\_\_\_\_\_\_\_\_\_\_\_\_\_\_\_\_\_\_\_\_\_\_\_\_\_\_\_\_\_\_\_\_\_\_\_\_\_\_\_\_\_\_\_\_\_\_\_\_\_\_\_\_\_\_\_\_\_\_\_\_\_\_\_\_\_\_\_\_
+
+# Fig3. yeast viability vs growth
+
+```{r}
+## ---- vg-setup ----
+library(readxl)
+library(tidyr)
+library(dplyr)
+library(multcomp)
+library(ggplot2)
+library(ggrepel)
+ 
+## ---- vg-data ----
+# Inputs: viability.csv (yeast viability, %) and bubbleplot.xlsx (yeast X24/X0).
+# Both files list the ten inhibitor conditions in the same order (control first).
+inh_lab   <- c("Control", "HMF", "Furfural", "Acetic acid", "Formic acid",
+               "Glycolic acid", "Levulinic acid", "Ferulic acid",
+               "Syringaldehyde", "Vanillin")
+inh_class <- c("Control", "Furan", "Furan", "Weak acid", "Weak acid", "Weak acid",
+               "Weak acid", "Phenolic", "Phenolic", "Phenolic")
+ 
+viab <- read.csv("viability.csv", check.names = FALSE) %>%
+  mutate(inhibitor = inh_lab) %>%
+  pivot_longer(-inhibitor, names_to = c("assay", "rep"), names_sep = "_", values_to = "y") %>%
+  mutate(assay = factor(assay, levels = c("none", "LF", "LP", "LFLP")))
+ 
+grow <- read_excel("bubbleplot.xlsx", skip = 2,
+                   col_names = c("inhibitor", paste0(rep(c("none", "LF", "LP", "LFLP"), each = 3),
+                                                     "_", 1:3))) %>%
+  filter(!is.na(inhibitor), inhibitor != "") %>%
+  mutate(inhibitor = inh_lab, across(-inhibitor, as.numeric)) %>%
+  pivot_longer(-inhibitor, names_to = c("assay", "rep"), names_sep = "_", values_to = "y") %>%
+  mutate(assay = factor(assay, levels = c("none", "LF", "LP", "LFLP")))
+ 
+## ---- vg-summary ----
+# x: change in viability vs No LAB of the same block (percentage points)
+# y: yeast growth (X24/X0) relative to the mean of No LAB of the same block
+# sig: Dunnett's test vs No LAB within each block (viability on %, growth on log ratio)
+dunnett_p <- function(d, formula) {
+  p <- summary(glht(aov(formula, data = d), linfct = mcp(assay = "Dunnett")))$test$pvalues
+  data.frame(assay = c("LF", "LP", "LFLP"), p = as.numeric(p))
+}
+ 
+vg <- lapply(inh_lab, function(i) {
+  dv <- filter(viab, inhibitor == i); dg <- filter(grow, inhibitor == i)
+  ref_v <- mean(dv$y[dv$assay == "none"]); ref_g <- mean(dg$y[dg$assay == "none"])
+  sv <- dv %>% filter(assay != "none") %>% group_by(assay) %>%
+    summarise(dviab = mean(y) - ref_v, .groups = "drop") %>%
+    left_join(rename(dunnett_p(dv, y ~ assay), p_viab = p), by = "assay")
+  sg <- dg %>% filter(assay != "none") %>% group_by(assay) %>%
+    summarise(growth = mean(y) / ref_g, .groups = "drop") %>%
+    left_join(rename(dunnett_p(dg, log(y) ~ assay), p_growth = p), by = "assay")
+  left_join(sv, sg, by = "assay") %>% mutate(inhibitor = i)
+}) %>% bind_rows() %>%
+  mutate(class = factor(inh_class[match(inhibitor, inh_lab)],
+                        levels = c("Control", "Furan", "Weak acid", "Phenolic")),
+         assay = factor(recode(as.character(assay), LFLP = "LF + LP"),
+                        levels = c("LF", "LP", "LF + LP")),
+         sig_growth = factor(ifelse(p_growth < 0.05, "p < 0.05", "n.s."), levels = c("p < 0.05", "n.s.")),
+         label = ifelse(p_viab < 0.05, paste0(inhibitor, " \u2020"), inhibitor))
+ 
+knitr::kable(vg, digits = 3, caption = "Viability change and growth ratio vs No LAB")
+ 
+## ---- vg-figure ----
+strain_cols <- c("LF" = "#F9BC3C",        # L. fermentum (yellow)
+                 "LP" = "#F8866D",        # L. plantarum (salmon)
+                 "LF + LP" = "#7A5340")   # both strains (brown)
+class_shapes <- c("Control" = 22, "Furan" = 21, "Weak acid" = 24, "Phenolic" = 23)
+# Thick black outline = significant effect on growth;
+# dagger (\u2020) after the label = significant effect on viability
+sig_stroke   <- c("p < 0.05" = 1.3, "n.s." = 0.35)
+sig_col      <- c("p < 0.05" = "black", "n.s." = "grey45")
+ 
+fig_vg <- ggplot(vg, aes(x = dviab, y = growth)) +
+  geom_hline(yintercept = 1, colour = "grey55", linetype = 2, linewidth = 0.4) +
+  geom_vline(xintercept = 0, colour = "grey55", linetype = 2, linewidth = 0.4) +
+  geom_point(aes(fill = assay, shape = class, stroke = sig_growth, colour = sig_growth), size = 3.2) +
+  geom_text_repel(aes(label = label), size = 2.4, colour = "grey25",
+                  min.segment.length = 0.2, segment.colour = "grey70",
+                  box.padding = 0.35, max.overlaps = Inf, seed = 1) +
+  scale_fill_manual(values = strain_cols, name = "Contamination") +
+  scale_shape_manual(values = class_shapes, name = "Inhibitor class") +
+  scale_discrete_manual("stroke", values = sig_stroke, guide = "none") +
+  scale_colour_manual(values = sig_col, name = "Effect on growth\n(Dunnett's test)") +
+  scale_y_log10(breaks = c(0.125, 0.25, 0.5, 1, 2), labels = c(0.125, 0.25, 0.5, 1, 2)) +
+  labs(x = "Change in yeast viability relative to No LAB (percentage points)",
+       y = "Yeast growth relative to No LAB (X24/X0)") +
+  guides(fill   = guide_legend(override.aes = list(shape = 21, size = 3.5, colour = "grey45", stroke = 0.35), order = 1),
+         shape  = guide_legend(override.aes = list(fill = "grey85", size = 3, colour = "grey45", stroke = 0.35), order = 2),
+         colour = guide_legend(override.aes = list(shape = 21, fill = "white", size = 3,
+                                                   stroke = c(1.3, 0.35)), order = 3)) +
+  theme_minimal(base_size = 10) +
+  theme(panel.grid.minor = element_blank(),
+        panel.border = element_rect(colour = "grey85", fill = NA, linewidth = 0.4),
+        axis.text = element_text(colour = "black"),
+        legend.title = element_text(size = 8.5), legend.text = element_text(size = 8),
+        legend.key.height = unit(0.45, "cm"))
+ 
+fig_vg
+ 
+ggsave("Fig_viability_growth.tiff", fig_vg, width = 18, height = 13, units = "cm",
+       dpi = 600, device = "tiff", compression = "lzw", bg = "white")
+ggsave("Fig_viability_growth.pdf", fig_vg, width = 18, height = 13, units = "cm",
+       device = cairo_pdf, bg = "white")
+ 
+```
+
+\_\_\_\_\_\_\_\_\_\_\_\_\_\_\_\_\_\_\_\_\_\_\_\_\_\_\_\_\_\_\_\_\_\_\_\_\_\_\_\_\_\_\_\_\_\_\_\_\_\_\_\_\_\_\_\_\_\_\_\_\_\_\_\_\_\_\_\_\_\_\_\_\_\_\_\_\_\_\_\_\_\_\_\_\_\_\_\_\_\_\_\_\_\_\_\_\_\_\_\_\_\_\_\_\_\_
+
+# Fig4. bacteria growth
+
+```{r}
+{r}
+## ---- bacteria-setup ----
+library(readxl)
+library(tidyr)
+library(dplyr)
+library(multcomp)
+library(ggplot2)
+ 
+## ---- bacteria-data ----
+# Bacterial growth ratio (N24/N0, CFU/mL) per strain and replicate.
+# First row of the sheet = inhibitor-free control.
+bac_raw <- read_excel(
+  path      = "bubbleplot_bacteria.xlsx",
+  sheet     = 1,
+  skip      = 2,
+  col_names = c("inhibitor",
+                "LF_1",   "LF_2",   "LF_3",
+                "LP_1",   "LP_2",   "LP_3",
+                "LFLP_1", "LFLP_2", "LFLP_3")
+) %>%
+  filter(!is.na(inhibitor), inhibitor != "") %>%
+  mutate(inhibitor = trimws(gsub(" ", " ", inhibitor)),   # remove non-breaking spaces
+         across(-inhibitor, as.numeric))
+ 
+inhibitor_levels <- bac_raw$inhibitor          # order of the spreadsheet; control first
+control_name     <- inhibitor_levels[1]
+assay_levels     <- c("LF", "LP", "LFLP")
+ 
+bac <- bac_raw %>%
+  pivot_longer(-inhibitor, names_to = c("assay", "rep"),
+               names_sep = "_", values_to = "ratio") %>%
+  mutate(inhibitor = factor(inhibitor, levels = inhibitor_levels),
+         assay     = factor(assay, levels = assay_levels))
+ 
+## ---- bacteria-normalization ----
+# Each value divided by the mean of the inhibitor-free control of the same assay
+bac <- bac %>%
+  group_by(assay) %>%
+  mutate(ref = mean(ratio[inhibitor == control_name]),
+         fc  = ratio / ref) %>%
+  ungroup()
+ 
+## ---- bacteria-stats ----
+# (1) Effect of each inhibitor on each bacterial assay: one-way ANOVA per assay,
+#     Dunnett's test of each inhibitor against the inhibitor-free control.
+#     NOTE: the control was run in a different experimental block, so these
+#     comparisons include day-to-day variation.
+# (2) Differences among assays within each inhibitor block (valid within-block):
+#     one-way ANOVA + Tukey's HSD.
+# All tests on log-transformed growth ratios.
+dun_res <- list(); tuk_res <- list(); anova_res <- list()
+ 
+for (a in assay_levels) {
+  d   <- filter(bac, assay == a)
+  fit <- aov(log(ratio) ~ inhibitor, data = d)
+  dun <- summary(glht(fit, linfct = mcp(inhibitor = "Dunnett")))
+  dun_res[[a]] <- data.frame(assay      = a,
+                             comparison = names(dun$test$coefficients),
+                             log_diff   = unname(dun$test$coefficients),
+                             p_adj      = unname(dun$test$pvalues))
+}
+ 
+for (inh in inhibitor_levels) {
+  d   <- filter(bac, inhibitor == inh)
+  fit <- aov(log(ratio) ~ assay, data = d)
+  anova_res[[inh]] <- data.frame(inhibitor = inh,
+                                 F = summary(fit)[[1]][["F value"]][1],
+                                 p = summary(fit)[[1]][["Pr(>F)"]][1])
+  tuk <- TukeyHSD(fit)$assay
+  tuk_res[[inh]] <- data.frame(inhibitor = inh, comparison = rownames(tuk),
+                               log_diff = tuk[, "diff"], p_adj = tuk[, "p adj"])
+}
+ 
+bac_dunnett <- bind_rows(dun_res)
+bac_anova   <- bind_rows(anova_res)
+bac_tukey   <- bind_rows(tuk_res); rownames(bac_tukey) <- NULL
+ 
+knitr::kable(bac_dunnett, digits = 3,
+             caption = "Dunnett's test: each inhibitor vs inhibitor-free control, per assay (log ratio)")
+knitr::kable(bac_anova, digits = 3,
+             caption = "One-way ANOVA among assays within each inhibitor block (log ratio)")
+knitr::kable(bac_tukey, digits = 3,
+             caption = "Tukey's HSD among assays within each inhibitor block (log ratio)")
+ 
+## ---- bacteria-figure ----
+sig <- bac_dunnett %>%
+  mutate(inhibitor = sub(" - .*$", "", comparison),
+         star      = ifelse(p_adj < 0.05, "*", "")) %>%
+  dplyr::select(assay, inhibitor, star) %>%
+  mutate(inhibitor = factor(inhibitor, levels = inhibitor_levels),
+         assay     = factor(assay, levels = assay_levels))
+ 
+summ <- bac %>%
+  group_by(inhibitor, assay) %>%
+  summarise(mean = mean(fc), sd = sd(fc), .groups = "drop") %>%
+  left_join(sig, by = c("inhibitor", "assay")) %>%
+  mutate(star       = ifelse(is.na(star), "", star),
+         label_mean = paste0(sprintf("%.2f", mean), star),
+         label_sd   = paste0("± ", sprintf("%.2f", sd)),
+         log2fc     = log2(mean))
+ 
+lim <- max(abs(summ$log2fc), na.rm = TRUE)
+summ <- mutate(summ, text_col = ifelse(abs(log2fc) > 0.6 * lim, "white", "grey10"))
+fc_breaks <- c(0.125, 0.25, 0.5, 1, 2, 4, 8)
+fc_breaks <- fc_breaks[abs(log2(fc_breaks)) <= lim]
+ 
+assay_labels <- c(LF = "LF", LP = "LP", LFLP = "LF + LP")
+ 
+fig4 <- ggplot(summ, aes(x = inhibitor, y = assay)) +
+  geom_point(aes(size = mean, fill = log2fc),
+             shape = 21, colour = "grey30", stroke = 0.4) +
+  geom_text(aes(label = label_mean, colour = text_col),
+            size = 2.7, fontface = "bold") +
+  geom_text(aes(label = label_sd), colour = "grey35",
+            nudge_y = -0.42, size = 2.3) +
+  scale_colour_identity() +
+  scale_size_continuous(range = c(11, 19), guide = "none") +
+  scale_fill_distiller(palette = "RdBu", direction = 1, limits = c(-lim, lim),
+                       breaks = log2(fc_breaks), labels = fc_breaks,
+                       name = "Bacterial growth\n(relative to control)") +
+  scale_y_discrete(limits = rev(assay_levels), labels = assay_labels,
+                   expand = expansion(add = 0.6)) +
+  scale_x_discrete(guide = guide_axis(angle = 40)) +
+  labs(x = NULL, y = NULL) +
+  theme_minimal(base_size = 10) +
+  theme(panel.grid.major = element_line(colour = "grey92", linewidth = 0.3),
+        panel.grid.minor = element_blank(),
+        panel.border = element_rect(colour = "grey85", fill = NA, linewidth = 0.4),
+        axis.text   = element_text(colour = "black"),
+        legend.title = element_text(size = 8.5),
+        plot.margin = margin(12, 8, 4, 4),
+        legend.key.height = unit(1.2, "cm"))
+ 
+fig4
+ 
+ggsave("Fig4_bacteria.tiff", fig4, width = 22, height = 9, units = "cm",
+       dpi = 600, device = "tiff", compression = "lzw", bg = "white")
+ggsave("Fig4_bacteria.pdf", fig4, width = 22, height = 9, units = "cm",
+       device = cairo_pdf, bg = "white")
+```
+
+\_\_\_\_\_\_\_\_\_\_\_\_\_\_\_\_\_\_\_\_\_\_\_\_\_\_\_\_\_\_\_\_\_\_\_\_\_\_\_\_\_\_\_\_\_\_\_\_\_\_\_\_\_\_\_\_\_\_\_\_\_\_\_\_\_\_\_\_\_\_\_\_\_\_\_\_\_\_\_\_\_\_\_\_\_\_\_\_\_\_\_\_\_\_\_\_\_\_\_\_\_\_\_\_\_\_\_\_\_\_\_\_
+
+# Fig5. metabolites
+
+```{r}
+# ---- met-setup ----
+library(readxl)
+library(tidyr)
+library(dplyr)
+library(multcomp)
+library(ggplot2)
+ 
+## ---- met-data ----
+# metabolites.xlsx: one sheet per metabolite (ethanol, glycerol, acetate, lactate),
+# rows = inhibitor conditions (control first), columns = assay x replicate.
+inh_lab <- c("Control", "HMF", "Furfural", "Acetic acid", "Formic acid",
+             "Glycolic acid", "Levulinic acid", "Ferulic acid",
+             "Syringaldehyde", "Vanillin")
+assay_levels <- c("none", "LF", "LP", "LFLP")
+ 
+read_met <- function(sheet) {
+  read_excel("metabolites.xlsx", sheet = sheet, skip = 2,
+             col_names = c("inhibitor", paste0(rep(assay_levels, each = 3), "_", 1:3))) %>%
+    filter(!is.na(inhibitor), inhibitor != "") %>%
+    mutate(inhibitor = inh_lab, across(-inhibitor, as.numeric)) %>%
+    pivot_longer(-inhibitor, names_to = c("assay", "rep"), names_sep = "_",
+                 values_to = "conc") %>%
+    mutate(metabolite = sheet)
+}
+ 
+met <- bind_rows(lapply(c("ethanol", "glycerol", "acetate", "lactate"), read_met)) %>%
+  filter(!is.na(conc)) %>%
+  mutate(inhibitor  = factor(inhibitor, levels = inh_lab),
+         assay      = factor(assay, levels = assay_levels),
+         metabolite = factor(metabolite, levels = c("ethanol", "glycerol", "acetate", "lactate")))
+ 
+## ---- met-stats ----
+# Within each inhibitor block and metabolite:
+#  - ethanol, glycerol, acetate: one-way ANOVA + Dunnett vs No LAB
+#  - lactate (not produced without bacteria): Tukey among LF, LP and LF + LP
+dun_res <- list(); tuk_res <- list()
+for (m in levels(met$metabolite)) for (inh in inh_lab) {
+  d <- droplevels(filter(met, metabolite == m, inhibitor == inh))
+  if (nrow(d) == 0) next
+  if ("none" %in% d$assay) {
+    dun <- summary(glht(aov(conc ~ assay, data = d), linfct = mcp(assay = "Dunnett")))
+    dun_res[[paste(m, inh)]] <- data.frame(metabolite = m, inhibitor = inh,
+                                           comparison = names(dun$test$coefficients),
+                                           diff  = unname(dun$test$coefficients),
+                                           p_adj = unname(dun$test$pvalues))
+  }
+  dc  <- droplevels(filter(d, assay != "none"))
+  tuk <- TukeyHSD(aov(conc ~ assay, data = dc))$assay
+  tuk_res[[paste(m, inh)]] <- data.frame(metabolite = m, inhibitor = inh,
+                                         comparison = rownames(tuk),
+                                         diff = tuk[, "diff"], p_adj = tuk[, "p adj"])
+}
+met_dunnett <- bind_rows(dun_res); rownames(met_dunnett) <- NULL
+met_tukey   <- bind_rows(tuk_res); rownames(met_tukey)   <- NULL
+ 
+knitr::kable(met_dunnett, digits = 3, caption = "Dunnett's test vs No LAB (g/L)")
+knitr::kable(met_tukey,   digits = 3, caption = "Tukey's HSD among contaminated assays (g/L)")
+ 
+## ---- met-figure ----
+# Style of the original figure: black symbols per assay, coloured strip with the
+# metabolite name on the right of each panel, light coloured panel border.
+library(patchwork)
+ 
+assay_labels <- c(none = "no LAB", LF = "LF", LP = "LP", LFLP = "LF + LP")
+assay_shapes <- c(none = 16, LF = 17, LP = 15, LFLP = 18)
+met_cols <- c(ethanol = "#41638E", glycerol = "#3C765B",
+              acetate = "#A16A2D", lactate  = "#8E3C3C")
+x_labels <- c("control", "HMF (1g.L-1)", "Furfural (3g.L-1)", "Acetic acid (4g.L-1)",
+              "Formic acid (0.75g.L-1)", "Glycolic acid (0.75g.L-1)",
+              "Levulinic acid (3g.L-1)", "Ferulic acid (0.75g.L-1)",
+              "Syringaldehyde (0.75g.L-1)", "Vanillin (0.75g.L-1)")
+x_expr <- lapply(x_labels, function(l) {
+  if (!grepl("g.L-1", l)) return(l)
+  parse(text = paste0('"', sub("g.L-1\\)", "", l), 'g.L"^-1*")"'))[[1]]
+})
+ 
+sig <- met_dunnett %>%
+  mutate(assay = sub(" - none", "", comparison),
+         star  = ifelse(p_adj < 0.05, "*", "")) %>%
+  dplyr::select(metabolite, inhibitor, assay, star)
+ 
+summ <- met %>%
+  group_by(metabolite, inhibitor, assay) %>%
+  summarise(mean = mean(conc), sd = sd(conc), .groups = "drop") %>%
+  left_join(mutate(sig, metabolite = factor(metabolite, levels = levels(met$metabolite)),
+                   inhibitor = factor(inhibitor, levels = inh_lab),
+                   assay = factor(assay, levels = assay_levels)),
+            by = c("metabolite", "inhibitor", "assay")) %>%
+  mutate(star = ifelse(is.na(star), "", star))
+ 
+dodge <- position_dodge(width = 0.65)
+ 
+met_panel <- function(m, show_x = FALSE, show_legend = FALSE) {
+  d <- filter(summ, metabolite == m) %>%
+    mutate(strip = paste0(toupper(m), "\n(g.L\u207b\u00b9)"))
+  ggplot(d, aes(x = inhibitor, y = mean, shape = assay, group = assay)) +
+    geom_errorbar(aes(ymin = mean - sd, ymax = mean + sd), width = 0.15,
+                  linewidth = 0.35, position = dodge) +
+    geom_point(aes(size = assay), position = dodge) +
+    scale_size_manual(values = c(none = 2.6, LF = 2.6, LP = 2.4, LFLP = 3.3), guide = "none") +
+    geom_text(aes(y = mean + sd, label = star), size = 3.3, vjust = -0.15,
+              position = dodge, show.legend = FALSE) +
+    scale_shape_manual(values = assay_shapes, labels = assay_labels, name = NULL, drop = FALSE) +
+    scale_x_discrete(labels = x_expr, drop = FALSE) +
+    scale_y_continuous(expand = expansion(mult = c(0.06, 0.16))) +
+    guides(shape = guide_legend(override.aes = list(size = c(3.6, 3.6, 3.3, 4.4)))) +
+    facet_grid(strip ~ .) +
+    labs(x = NULL, y = NULL) +
+    theme_minimal(base_size = 10) +
+    theme(panel.grid.minor = element_blank(),
+          panel.grid.major = element_line(colour = "grey92", linewidth = 0.3),
+          panel.border = element_rect(colour = scales::alpha(met_cols[[m]], 0.45),
+                                      fill = NA, linewidth = 1),
+          strip.background = element_rect(fill = met_cols[[m]], colour = NA),
+          strip.text.y = element_text(colour = "white", face = "bold", size = 11,
+                                      angle = 90, lineheight = 0.9),
+          axis.text = element_text(colour = "black"),
+          axis.text.x = if (show_x) element_text(angle = 40, hjust = 1) else element_blank(),
+          legend.position = if (show_legend) "top" else "none",
+          legend.text = element_text(size = 11),
+          plot.margin = margin(1, 4, 1, 4))
+}
+ 
+fig5 <- met_panel("ethanol", show_legend = TRUE) /
+  met_panel("glycerol") /
+  met_panel("acetate") /
+  met_panel("lactate", show_x = TRUE)
+ 
+fig5
+ 
+ggsave("Fig5_metabolites.tiff", fig5, width = 17, height = 18, units = "cm",
+       dpi = 600, device = "tiff", compression = "lzw", bg = "white")
+ggsave("Fig5_metabolites.pdf", fig5, width = 17, height = 18, units = "cm",
+       device = cairo_pdf, bg = "white")
+ 
+```
+
+```{r}
+## ---- met-ethanol-lactate ----
+# Ethanol loss (No LAB minus contaminated) vs lactate produced, per block and assay
+eth_lac <- met %>%
+  group_by(metabolite, inhibitor, assay) %>%
+  summarise(v = mean(conc), .groups = "drop") %>%
+  pivot_wider(names_from = metabolite, values_from = v) %>%
+  group_by(inhibitor) %>%
+  mutate(ethanol_loss = ethanol[assay == "none"] - ethanol) %>%
+  ungroup() %>%
+  filter(assay != "none") %>%
+  mutate(expected_loss = 0.511 * lactate)   # ~0.51 g ethanol forgone per g lactate
+
+knitr::kable(eth_lac %>% dplyr::select(inhibitor, assay, ethanol_loss, lactate, expected_loss),
+             digits = 2, caption = "Observed ethanol loss vs loss expected from lactate")
+
+cor.test(eth_lac$ethanol_loss, eth_lac$lactate)                        # all conditions
+with(filter(eth_lac, inhibitor != "Formic acid"),
+     cor.test(ethanol_loss, lactate))                                   # excluding formic acid
+summary(lm(ethanol_loss ~ lactate, data = eth_lac))                     # slope vs 0.511
+```
+
+```{r}
+## ---- eth-lac-setup ----
+# Run AFTER the metabolites chunks (uses the object 'met').
+library(dplyr)
+library(tidyr)
+library(ggplot2)
+library(ggrepel)
+
+## ---- eth-lac-data ----
+# Ethanol loss = mean ethanol (No LAB) - mean ethanol (contaminated), same block.
+# Expected loss if the glucose converted to lactate had been fermented by yeast:
+# ~0.511 g ethanol per g lactate (same net value for homo- and heterofermentative LAB).
+eth_lac <- met %>%
+  group_by(metabolite, inhibitor, assay) %>%
+  summarise(v = mean(conc), .groups = "drop") %>%
+  pivot_wider(names_from = metabolite, values_from = v) %>%
+  group_by(inhibitor) %>%
+  mutate(ethanol_loss = ethanol[assay == "none"] - ethanol) %>%
+  ungroup() %>%
+  filter(assay != "none") %>%
+  mutate(expected_loss = 0.511 * lactate,
+         formic = inhibitor == "Formic acid",
+         assay  = factor(recode(as.character(assay), LFLP = "LF + LP"),
+                         levels = c("LF", "LP", "LF + LP")))
+
+knitr::kable(eth_lac %>% dplyr::select(inhibitor, assay, ethanol_loss, lactate, expected_loss),
+             digits = 2, caption = "Observed ethanol loss vs loss expected from lactate")
+
+## ---- eth-lac-stats ----
+ct_all <- cor.test(eth_lac$ethanol_loss, eth_lac$lactate)
+ct_nof <- with(filter(eth_lac, !formic), cor.test(ethanol_loss, lactate))
+fit    <- lm(ethanol_loss ~ lactate, data = filter(eth_lac, !formic))
+ct_all; ct_nof; summary(fit)
+
+## ---- eth-lac-figure ----
+strain_cols <- c("LF" = "#F9BC3C", "LP" = "#F8866D", "LF + LP" = "#7A5340")
+lab_r <- sprintf("r = %.2f (all conditions)\nr = %.2f (excluding formic acid)",
+                 ct_all$estimate, ct_nof$estimate)
+
+figS1 <- ggplot(eth_lac, aes(x = lactate, y = ethanol_loss)) +
+  geom_hline(yintercept = 0, colour = "grey70", linewidth = 0.3) +
+  geom_abline(intercept = 0, slope = 0.511, linetype = 2, colour = "grey35") +
+  geom_smooth(data = filter(eth_lac, !formic), method = "lm", se = TRUE,
+              colour = "black", fill = "grey85", linewidth = 0.5, formula = y ~ x) +
+  geom_point(aes(fill = assay, shape = formic), size = 3, colour = "grey25", stroke = 0.4) +
+  geom_text_repel(aes(label = inhibitor), size = 2.3, colour = "grey30",
+                  segment.colour = "grey75", min.segment.length = 0.2,
+                  max.overlaps = Inf, seed = 1) +
+  annotate("text", x = 0.85, y = 1.75, label = lab_r, hjust = 0, size = 3) +
+  annotate("text", x = 2.65, y = 0.511 * 2.65, label = "expected\n(0.51 g/g)",
+           hjust = 0, vjust = 1.2, size = 2.6, colour = "grey35") +
+  scale_fill_manual(values = strain_cols, name = "Contamination") +
+  scale_shape_manual(values = c(`FALSE` = 21, `TRUE` = 24),
+                     labels = c(`FALSE` = "Other inhibitors", `TRUE` = "Formic acid"),
+                     name = NULL) +
+  guides(fill = guide_legend(override.aes = list(shape = 21, size = 3.5))) +
+  scale_x_continuous(limits = c(0.8, 2.9)) +
+  labs(x = expression("Lactate produced (g" %.% "L"^-1 * ")"),
+       y = expression("Ethanol loss relative to No LAB (g" %.% "L"^-1 * ")")) +
+  theme_minimal(base_size = 10) +
+  theme(panel.grid.minor = element_blank(),
+        panel.border = element_rect(colour = "grey85", fill = NA, linewidth = 0.4),
+        axis.text = element_text(colour = "black"))
+
+figS1
+
+ggsave("FigS1_ethanol_lactate.tiff", figS1, width = 17, height = 12, units = "cm",
+       dpi = 600, device = "tiff", compression = "lzw", bg = "white")
+ggsave("FigS1_ethanol_lactate.pdf", figS1, width = 17, height = 12, units = "cm",
+       device = cairo_pdf, bg = "white")
+```
+
+\_\_\_\_\_\_\_\_\_\_\_\_\_\_\_\_\_\_\_\_\_\_\_\_\_\_\_\_\_\_\_\_\_\_\_\_\_\_\_\_\_\_\_\_\_\_\_\_\_\_\_\_\_\_\_\_\_\_\_\_\_\_\_\_\_\_\_\_\_\_\_\_\_\_\_\_\_\_\_\_\_\_\_\_\_\_\_\_\_\_\_\_\_\_\_\_\_\_\_\_\_\_\_\_\_\_\_\_\_\_\_\_
+
+# Fig6. pH
+
+```{r}
+# ---- ph-setup ----
+library(tidyr)
+library(dplyr)
+library(multcomp)
+library(ggplot2)
+ 
+## ---- ph-data ----
+# ph.csv: final pH (24 h), one row per inhibitor (Table 1 order, control first),
+# columns = assay x replicate (none_1 ... LFLP_3).
+inh_lab <- c("Control", "HMF", "Furfural", "Acetic acid", "Formic acid",
+             "Glycolic acid", "Levulinic acid", "Ferulic acid",
+             "Syringaldehyde", "Vanillin")
+assay_levels <- c("none", "LF", "LP", "LFLP")
+ 
+ph <- read.csv("ph.csv", check.names = FALSE) %>%
+  mutate(inhibitor = inh_lab) %>%
+  pivot_longer(-inhibitor, names_to = c("assay", "rep"), names_sep = "_", values_to = "pH") %>%
+  mutate(inhibitor = factor(inhibitor, levels = inh_lab),
+         assay     = factor(assay, levels = assay_levels))
+ 
+## ---- ph-stats ----
+# Within each inhibitor block: Dunnett vs No LAB; Tukey among contaminated assays.
+dun_res <- list(); tuk_res <- list()
+for (inh in inh_lab) {
+  d   <- filter(ph, inhibitor == inh)
+  dun <- summary(glht(aov(pH ~ assay, data = d), linfct = mcp(assay = "Dunnett")))
+  dun_res[[inh]] <- data.frame(inhibitor = inh, comparison = names(dun$test$coefficients),
+                               diff = unname(dun$test$coefficients),
+                               p_adj = unname(dun$test$pvalues))
+  tuk <- TukeyHSD(aov(pH ~ assay, data = droplevels(filter(d, assay != "none"))))$assay
+  tuk_res[[inh]] <- data.frame(inhibitor = inh, comparison = rownames(tuk),
+                               diff = tuk[, "diff"], p_adj = tuk[, "p adj"])
+}
+ph_dunnett <- bind_rows(dun_res); rownames(ph_dunnett) <- NULL
+ph_tukey   <- bind_rows(tuk_res); rownames(ph_tukey)   <- NULL
+ 
+knitr::kable(ph_dunnett, digits = 3, caption = "Final pH: Dunnett's test vs No LAB")
+knitr::kable(ph_tukey,   digits = 3, caption = "Final pH: Tukey's HSD among contaminated assays")
+ 
+## ---- ph-figure ----
+sig <- ph_dunnett %>%
+  mutate(assay = sub(" - none", "", comparison),
+         star  = ifelse(p_adj < 0.05, "*", "")) %>%
+  dplyr::select(inhibitor, assay, star) %>%
+  mutate(inhibitor = factor(inhibitor, levels = inh_lab),
+         assay     = factor(assay, levels = assay_levels))
+ 
+summ <- ph %>%
+  group_by(inhibitor, assay) %>%
+  summarise(mean = mean(pH), sd = sd(pH), .groups = "drop") %>%
+  left_join(sig, by = c("inhibitor", "assay")) %>%
+  mutate(star       = ifelse(is.na(star), "", star),
+         label_mean = paste0(sprintf("%.2f", mean), star),
+         label_sd   = paste0("± ", sprintf("%.2f", sd)),
+         text_col   = ifelse(mean < 4.3 | mean > 5.6, "white", "grey10"))
+ 
+assay_labels <- c(none = "No LAB", LF = "LF", LP = "LP", LFLP = "LF + LP")
+ 
+fig6 <- ggplot(summ, aes(x = inhibitor, y = assay, fill = mean)) +
+  geom_tile(colour = "white", linewidth = 1.2) +
+  geom_text(aes(label = label_mean, colour = text_col),
+            nudge_y = 0.13, size = 3.2, fontface = "bold") +
+  geom_text(aes(label = label_sd, colour = text_col),
+            nudge_y = -0.20, size = 2.4) +
+  scale_colour_identity() +
+  scale_fill_distiller(palette = "RdBu", direction = 1, limits = c(3.6, 6.2),
+                       name = "Final pH") +
+  scale_y_discrete(limits = rev(assay_levels), labels = assay_labels) +
+  scale_x_discrete(guide = guide_axis(angle = 40)) +
+  labs(x = NULL, y = NULL) +
+  theme_minimal(base_size = 10) +
+  theme(panel.grid  = element_blank(),
+        axis.text   = element_text(colour = "black"),
+        legend.key.height = unit(1.2, "cm"))
+ 
+fig6
+ 
+ggsave("Fig6_pH.tiff", fig6, width = 22, height = 9, units = "cm",
+       dpi = 600, device = "tiff", compression = "lzw", bg = "white")
+ggsave("Fig6_pH.pdf", fig6, width = 22, height = 9, units = "cm",
+       device = cairo_pdf, bg = "white")
+ 
+## ---- ph-lactate ----
+# Relationship between pH drop and lactate produced (contaminated cultures)
+# Requires the 'met' object from the metabolites chunks.
+if (exists("met")) {
+  lac <- met %>% filter(metabolite == "lactate") %>%
+    group_by(inhibitor, assay) %>% summarise(lactate = mean(conc), .groups = "drop")
+  dph <- summ %>% group_by(inhibitor) %>%
+    mutate(delta_pH = mean - mean[assay == "none"]) %>% ungroup() %>%
+    filter(assay != "none") %>%
+    left_join(lac, by = c("inhibitor", "assay"))
+  print(cor.test(dph$delta_pH, dph$lactate))
+}
+ 
+```
