@@ -48,10 +48,6 @@ own bacteria-free control). Comparisons are therefore made within blocks: one-wa
 test against the bacteria-free control and Tukey's test among contaminated assays. Growth ratios
 are analysed on the log scale. See the Rmd for details.
 
-## License
-
-Data: CC BY 4.0. Code: MIT.
-
 ## Contact
 
 Thamiris Guerra Giacon, [thamigg23@gmail.com] · ORCID: [0000-0002-2025-3764]
