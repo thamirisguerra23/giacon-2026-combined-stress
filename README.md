@@ -2,7 +2,7 @@
 
 Data and analysis code for the manuscript:
 
-> Giacon, T. G., Vilela, N., [Olsson, L.,] Basso, T. O. Physiological responses of industrial *Saccharomyces cerevisiae* to combined stress from lignocellulosic inhibitors and lactic acid bacteria. [Journal of Industrial Biotechnology], [2026]. DOI: [to be added]
+> Giacon, T. G., Vilela, N., Olsson, L., Basso, T. O. Physiological responses of industrial *Saccharomyces cerevisiae* to combined stress from lignocellulosic inhibitors and lactic acid bacteria. [Journal of Industrial Biotechnology], [2026]. DOI: [to be added]
 
 ## Overview
 
