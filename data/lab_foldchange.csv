@@ -1,0 +1,91 @@
+inhibitor,conc_g_L,lab,rep,fold_change
+None,,LF,1,5.47
+None,,LF,2,4.59
+None,,LF,3,5.8
+None,,LP,1,8.64
+None,,LP,2,6.73
+None,,LP,3,9.49
+None,,LF+LP,1,6.31
+None,,LF+LP,2,4.2
+None,,LF+LP,3,8.89
+HMF,1,LF,1,12.1
+HMF,1,LF,2,6.11
+HMF,1,LF,3,6.11
+HMF,1,LP,1,7
+HMF,1,LP,2,10
+HMF,1,LP,3,5
+HMF,1,LF+LP,1,4.55
+HMF,1,LF+LP,2,4.38
+HMF,1,LF+LP,3,7.65
+Furfural,3,LF,1,16.1
+Furfural,3,LF,2,12.8
+Furfural,3,LF,3,17.9
+Furfural,3,LP,1,36.9
+Furfural,3,LP,2,50
+Furfural,3,LP,3,40
+Furfural,3,LF+LP,1,14.1
+Furfural,3,LF+LP,2,28.3
+Furfural,3,LF+LP,3,12
+Acetic acid,4,LF,1,0.914
+Acetic acid,4,LF,2,1.18
+Acetic acid,4,LF,3,0.743
+Acetic acid,4,LP,1,1.73
+Acetic acid,4,LP,2,1.09
+Acetic acid,4,LP,3,0.778
+Acetic acid,4,LF+LP,1,1.32
+Acetic acid,4,LF+LP,2,0.293
+Acetic acid,4,LF+LP,3,1.76
+Formic acid,0.75,LF,1,1.25
+Formic acid,0.75,LF,2,1.66
+Formic acid,0.75,LF,3,3.29
+Formic acid,0.75,LP,1,2.44
+Formic acid,0.75,LP,2,1.42
+Formic acid,0.75,LP,3,1.31
+Formic acid,0.75,LF+LP,1,4.2
+Formic acid,0.75,LF+LP,2,5.55
+Formic acid,0.75,LF+LP,3,2.08
+Glycolic acid,0.75,LF,1,5.68
+Glycolic acid,0.75,LF,2,4.29
+Glycolic acid,0.75,LF,3,5.25
+Glycolic acid,0.75,LP,1,11.5
+Glycolic acid,0.75,LP,2,5.42
+Glycolic acid,0.75,LP,3,6.32
+Glycolic acid,0.75,LF+LP,1,6.57
+Glycolic acid,0.75,LF+LP,2,5.95
+Glycolic acid,0.75,LF+LP,3,4.74
+Levulinic acid,3,LF,1,10
+Levulinic acid,3,LF,2,10.4
+Levulinic acid,3,LF,3,13.2
+Levulinic acid,3,LP,1,9.6
+Levulinic acid,3,LP,2,10.4
+Levulinic acid,3,LP,3,13.1
+Levulinic acid,3,LF+LP,1,12.1
+Levulinic acid,3,LF+LP,2,9.58
+Levulinic acid,3,LF+LP,3,14.6
+Ferulic acid,0.75,LF,1,20.5
+Ferulic acid,0.75,LF,2,13.9
+Ferulic acid,0.75,LF,3,13.8
+Ferulic acid,0.75,LP,1,12.2
+Ferulic acid,0.75,LP,2,17.7
+Ferulic acid,0.75,LP,3,13.8
+Ferulic acid,0.75,LF+LP,1,16.2
+Ferulic acid,0.75,LF+LP,2,17.1
+Ferulic acid,0.75,LF+LP,3,14.8
+Syringaldehyde,0.75,LF,1,15.7
+Syringaldehyde,0.75,LF,2,9.58
+Syringaldehyde,0.75,LF,3,15.3
+Syringaldehyde,0.75,LP,1,5.36
+Syringaldehyde,0.75,LP,2,3.26
+Syringaldehyde,0.75,LP,3,4.52
+Syringaldehyde,0.75,LF+LP,1,27
+Syringaldehyde,0.75,LF+LP,2,19.2
+Syringaldehyde,0.75,LF+LP,3,8.7
+Vanillin,0.75,LF,1,14.7
+Vanillin,0.75,LF,2,10.4
+Vanillin,0.75,LF,3,10
+Vanillin,0.75,LP,1,8.84
+Vanillin,0.75,LP,2,5.48
+Vanillin,0.75,LP,3,4.74
+Vanillin,0.75,LF+LP,1,12.4
+Vanillin,0.75,LF+LP,2,13.3
+Vanillin,0.75,LF+LP,3,8.24
